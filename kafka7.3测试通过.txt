@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.atguigu</groupId>
+    <artifactId>kafka_api</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>0.11.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_2.12</artifactId>
+            <version>0.11.0.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>8</source>
+                    <target>8</target>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-assembly-plugin </artifactId>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.atguigu.kafka.TimestampConsumer</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+
+
+
+
+package com.atguigu.kafka;
+
+import com.sun.deploy.util.ParameterUtil;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
+
+import javax.tools.Tool;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+public class TimestampConsumer {
+        
+    public static void main(String[] args) {
+
+        if (args.length != 1) {
+            System.out.println("Usage:Please input date like 2019-04-02");
+            System.exit(1);
+        }
+
+        
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "hadoop102:9092,hadoop103:9092,hadoop104:9092");
+        props.put("group.id", "first");
+        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+
+        String topic = "first";
+
+        //2019-07-02 23:20:00
+        int count=0;
+
+        String startDate = args[0];       // 开始时间
+
+
+        String endDate = args[1];         // 结束时间
+
+
+        Long startTime = timeFormat(startDate);
+        long endTime = timeFormat(endDate);
+
+        try {
+            // 获取topic的partition信息
+            List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
+            List<TopicPartition> topicPartitions = new ArrayList<>();
+            
+            Map<TopicPartition, Long> timestampsToSearch = new HashMap<>();
+            DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+//            Date now = new Date();
+//
+//            long nowTime = now.getTime();
+//
+//            System.out.println("当前时间: " + df.format(now));
+
+            //long fetchDataTime = nowTime - 1000 * 60 * 60 * 24 * 120;  // 计算30分钟之前的时间戳
+//            long fetchDataTime = nowTime - 1000 * 60 * 60*60*12;  // 计算30分钟之前的时间戳
+            long fetchDataTime = startTime;
+
+
+            for(PartitionInfo partitionInfo : partitionInfos) {
+
+                topicPartitions.add(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
+
+                timestampsToSearch.put(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()), fetchDataTime);
+            }
+
+
+
+
+            consumer.assign(topicPartitions);
+            
+            // 获取每个partition一个小时之前的偏移量
+            Map<TopicPartition, OffsetAndTimestamp> map = consumer.offsetsForTimes(timestampsToSearch);
+            
+            OffsetAndTimestamp offsetTimestamp = null;
+            System.out.println("开始设置各分区初始偏移量...");
+            for(Map.Entry<TopicPartition, OffsetAndTimestamp> entry : map.entrySet()) {
+                // 如果设置的查询偏移量的时间点大于最大的索引记录时间，那么value就为空
+                offsetTimestamp = entry.getValue();
+                if(offsetTimestamp != null) {
+                    int partition = entry.getKey().partition();
+                    long timestamp = offsetTimestamp.timestamp();
+                    long offset = offsetTimestamp.offset();
+                    System.out.println("partition = " + partition + 
+                            ", time = " + df.format(new Date(timestamp))+ 
+                            ", offset = " + offset);
+                    // 设置读取消息的偏移量
+                    consumer.seek(entry.getKey(), offset);
+                }
+            }
+            System.out.println("设置各分区初始偏移量结束...");
+
+            while(true) {
+                ConsumerRecords<String, String> records = consumer.poll(1000);
+                for (ConsumerRecord<String, String> record : records) {
+                    System.out.println("partition = " + record.partition() + ", offset = " + record.offset());
+                    try {
+                    if (endTime == 0 || record.timestamp() <= endTime) {
+                        System.out.printf("offset = %d,p = %d, key = %s, value = %s \r\n", record.offset(), record.partition(), record.key(), record.value());
+                        count+=1;
+                        System.out.println(count);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            consumer.close();
+        }
+    }
+
+    // 格式化时间
+    public static long timeFormat(String dateTime) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            //return (sdf.parse(dateTime).getTime() - 8 * 60 * 60 * 1000);
+            return (sdf.parse(dateTime).getTime());
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
