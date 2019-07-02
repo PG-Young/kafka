@@ -1,0 +1,106 @@
+
+
+
+public static void main(String[] args) {
+
+    String startTime = "2018-08-14 21:19:09";       // 开始时间
+    String endTime = "2018-08-14 21:20:59";         // 结束时间
+    //        endTime = "";         // 不设置结束时间
+    new ReConsumerByTime().start(startTime, endTime);
+}
+
+
+
+
+
+package com.system.kafka.clients.demo.producer.reconsumer;
+
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
+import org.apache.kafka.common.TopicPartition;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+/**
+ * 通过开始时间和结束时间，重新消费kafka消息
+ */
+public class ReConsumerByTime {
+
+    KafkaConsumer<String, String> consumer;
+
+    final String topic = "mytopic";
+    final String groupId = "test";
+    final int partitionNum = 4;
+    final String bootstrapServers = "10.211.55.5:9092";
+
+    public static void main(String[] args) {
+        String startTime = "2018-08-14 21:19:09";       // 开始时间
+        String endTime = "2018-08-14 21:20:59";         // 结束时间
+//        endTime = "";         // 不设置结束时间
+        new ReConsumerByTime().start(startTime, endTime);
+    }
+
+    public void start(String startTime, String endTime) {
+        init();
+        start(timeFormat(startTime), timeFormat(endTime));
+    }
+
+    public void start(long startTime, long endTime) {
+        Map<TopicPartition, Long> startMap = new HashMap<>();
+        for (int i = 0; i < partitionNum; i++) startMap.put(new TopicPartition(topic, i), startTime);
+
+        Map<TopicPartition, OffsetAndTimestamp> startOffsetMap = consumer.offsetsForTimes(startMap);
+
+        List<TopicPartition> topicPartitions = new ArrayList<>();
+        startMap.forEach((k, v) -> {
+            topicPartitions.add(k);
+        });
+        consumer.assign(topicPartitions);
+
+        startMap.forEach((k, v) -> {
+            consumer.seek(k, startOffsetMap.get(k).offset());
+            System.out.println(k + ", offsets:" + startOffsetMap.get(k).offset());
+        });
+
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(100);
+            for (ConsumerRecord<String, String> record : records) {
+                try {
+                    if (endTime == 0 || record.timestamp() <= endTime) {
+                        System.out.printf("offset = %d,p = %d, key = %s, value = %s \r\n", record.offset(), record.partition(), record.key(), record.value());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    // 格式化时间
+    public long timeFormat(String dateTime) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            return sdf.parse(dateTime).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    // 初始化消费者连接
+    public void init() {
+        Properties props = new Properties();
+        props.put("bootstrap.servers", bootstrapServers);
+        props.put("group.id", groupId);
+        props.put("enable.auto.commit", "true");
+        props.put("auto.commit.interval.ms", "1000");
+        props.put("session.timeout.ms", "30000");
+        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        consumer = new KafkaConsumer<>(props);
+    }
+}
