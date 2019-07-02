@@ -61,6 +61,11 @@
 
 
 
+java -jar kafka_api-1.0-SNAPSHOT-jar-with-dependencies.jar com.atguigu.kafka.TimestampConsumer
+
+
+
+
 
 package com.atguigu.kafka;
 
@@ -100,17 +105,17 @@ public class TimestampConsumer {
         //2019-07-02 23:20:00
         int count=0;
 
-        String startDate = args[0];       // ¿ªÊ¼Ê±¼ä
+        String startDate = args[0];       // å¼€å§‹æ—¶é—´
 
 
-        String endDate = args[1];         // ½áÊøÊ±¼ä
+        String endDate = args[1];         // ç»“æŸæ—¶é—´
 
 
         Long startTime = timeFormat(startDate);
         long endTime = timeFormat(endDate);
 
         try {
-            // »ñÈ¡topicµÄpartitionĞÅÏ¢
+            // è·å–topicçš„partitionä¿¡æ¯
             List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
             List<TopicPartition> topicPartitions = new ArrayList<>();
             
@@ -121,10 +126,10 @@ public class TimestampConsumer {
 //
 //            long nowTime = now.getTime();
 //
-//            System.out.println("µ±Ç°Ê±¼ä: " + df.format(now));
+//            System.out.println("å½“å‰æ—¶é—´: " + df.format(now));
 
-            //long fetchDataTime = nowTime - 1000 * 60 * 60 * 24 * 120;  // ¼ÆËã30·ÖÖÓÖ®Ç°µÄÊ±¼ä´Á
-//            long fetchDataTime = nowTime - 1000 * 60 * 60*60*12;  // ¼ÆËã30·ÖÖÓÖ®Ç°µÄÊ±¼ä´Á
+            //long fetchDataTime = nowTime - 1000 * 60 * 60 * 24 * 120;  // è®¡ç®—30åˆ†é’Ÿä¹‹å‰çš„æ—¶é—´æˆ³
+//            long fetchDataTime = nowTime - 1000 * 60 * 60*60*12;  // è®¡ç®—30åˆ†é’Ÿä¹‹å‰çš„æ—¶é—´æˆ³
             long fetchDataTime = startTime;
 
 
@@ -140,13 +145,13 @@ public class TimestampConsumer {
 
             consumer.assign(topicPartitions);
             
-            // »ñÈ¡Ã¿¸öpartitionÒ»¸öĞ¡Ê±Ö®Ç°µÄÆ«ÒÆÁ¿
+            // è·å–æ¯ä¸ªpartitionä¸€ä¸ªå°æ—¶ä¹‹å‰çš„åç§»é‡
             Map<TopicPartition, OffsetAndTimestamp> map = consumer.offsetsForTimes(timestampsToSearch);
             
             OffsetAndTimestamp offsetTimestamp = null;
-            System.out.println("¿ªÊ¼ÉèÖÃ¸÷·ÖÇø³õÊ¼Æ«ÒÆÁ¿...");
+            System.out.println("å¼€å§‹è®¾ç½®å„åˆ†åŒºåˆå§‹åç§»é‡...");
             for(Map.Entry<TopicPartition, OffsetAndTimestamp> entry : map.entrySet()) {
-                // Èç¹ûÉèÖÃµÄ²éÑ¯Æ«ÒÆÁ¿µÄÊ±¼äµã´óÓÚ×î´óµÄË÷Òı¼ÇÂ¼Ê±¼ä£¬ÄÇÃ´value¾ÍÎª¿Õ
+                // å¦‚æœè®¾ç½®çš„æŸ¥è¯¢åç§»é‡çš„æ—¶é—´ç‚¹å¤§äºæœ€å¤§çš„ç´¢å¼•è®°å½•æ—¶é—´ï¼Œé‚£ä¹ˆvalueå°±ä¸ºç©º
                 offsetTimestamp = entry.getValue();
                 if(offsetTimestamp != null) {
                     int partition = entry.getKey().partition();
@@ -155,11 +160,11 @@ public class TimestampConsumer {
                     System.out.println("partition = " + partition + 
                             ", time = " + df.format(new Date(timestamp))+ 
                             ", offset = " + offset);
-                    // ÉèÖÃ¶ÁÈ¡ÏûÏ¢µÄÆ«ÒÆÁ¿
+                    // è®¾ç½®è¯»å–æ¶ˆæ¯çš„åç§»é‡
                     consumer.seek(entry.getKey(), offset);
                 }
             }
-            System.out.println("ÉèÖÃ¸÷·ÖÇø³õÊ¼Æ«ÒÆÁ¿½áÊø...");
+            System.out.println("è®¾ç½®å„åˆ†åŒºåˆå§‹åç§»é‡ç»“æŸ...");
 
             while(true) {
                 ConsumerRecords<String, String> records = consumer.poll(1000);
@@ -184,7 +189,7 @@ public class TimestampConsumer {
         }
     }
 
-    // ¸ñÊ½»¯Ê±¼ä
+    // æ ¼å¼åŒ–æ—¶é—´
     public static long timeFormat(String dateTime) {
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
