@@ -1,0 +1,104 @@
+package com.transsion.bigdata;
+
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+public class Demo {
+    public static void main(String[] args) {
+        for (int i = 0; i < 10; i++) {
+            if (i%2==0){
+                System.out.println(i);
+            }
+        }
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "172.10.0.200:9092,172.10.0.201:9093");
+        props.put("group.id", "reminderlog-kafkatoS3");
+        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+        String topic = "reminder";
+        int count=0;
+
+        String startDate = "2019-07-08 00:00:00";       // 开始时间
+        //String endDate = args[1];         // 结束时间
+        String endDate = "2019-07-09 00:00:00";         // 结束时间
+
+        Long startTime = timeFormat(startDate);
+        long endTime = timeFormat(endDate);
+
+        try {
+            // 获取topic的partition信息
+            List<PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
+            List<TopicPartition> topicPartitions = new ArrayList<>();
+            Map<TopicPartition, Long> timestampsToSearch = new HashMap<>();
+            DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+            long fetchDataTime = startTime;
+            for(PartitionInfo partitionInfo : partitionInfos) {
+                topicPartitions.add(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
+                timestampsToSearch.put(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()), fetchDataTime);
+            }
+            consumer.assign(topicPartitions);
+            // 获取每个partition偏移量
+            Map<TopicPartition, OffsetAndTimestamp> map = consumer.offsetsForTimes(timestampsToSearch);
+            OffsetAndTimestamp offsetTimestamp = null;
+            System.out.println("开始设置各分区初始偏移量...");
+            for(Map.Entry<TopicPartition, OffsetAndTimestamp> entry : map.entrySet()) {
+                // 如果设置的查询偏移量的时间点大于最大的索引记录时间，那么value就为空
+                offsetTimestamp = entry.getValue();
+                if(offsetTimestamp != null) {
+                    int partition = entry.getKey().partition();
+                    long timestamp = offsetTimestamp.timestamp();
+                    long offset = offsetTimestamp.offset();
+                    System.out.println("partition = " + partition +
+                            ", time = " + df.format(new Date(timestamp))+
+                            ", offset = " + offset);
+                    // 设置读取消息的偏移量
+                    consumer.seek(entry.getKey(), offset);
+                }
+            }
+            System.out.println("设置各分区初始偏移量结束...");
+            while(true) {
+                ConsumerRecords<String, String> records = consumer.poll(1000);
+                for (ConsumerRecord<String, String> record : records) {
+                    System.out.println("partition = " + record.partition() + ", offset = " + record.offset());
+                    try {
+                        if (endTime == 0 || record.timestamp() <= endTime) {
+                            System.out.printf("offset = %d,p = %d, key = %s, value = %s \r\n", record.offset(), record.partition(), record.key(), record.value());
+                            count+=1;
+                            System.out.println(count);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            consumer.close();
+        }
+
+    }
+
+    // 格式化时间
+    public static long timeFormat(String dateTime) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            return (sdf.parse(dateTime).getTime() - 8 * 60 * 60 * 1000);
+            //return (sdf.parse(dateTime).getTime());
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+}
