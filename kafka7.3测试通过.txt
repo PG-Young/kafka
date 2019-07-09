@@ -12,12 +12,12 @@
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
-            <version>0.11.0.0</version>
+            <version>0.10.2.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
-            <artifactId>kafka_2.12</artifactId>
-            <version>0.11.0.0</version>
+            <artifactId>kafka_2.11</artifactId>
+            <version>0.10.2.0</version>
         </dependency>
     </dependencies>
 
@@ -94,22 +94,21 @@ public class TimestampConsumer {
 
         
         Properties props = new Properties();
-        props.put("bootstrap.servers", "hadoop102:9092,hadoop103:9092,hadoop104:9092");
-        props.put("group.id", "first");
+        props.put("bootstrap.servers", "172.10.0.200:9092,172.10.0.201:9093");
+        props.put("group.id", "reminderlog-kafkatoS3");
         props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
 
-        String topic = "first";
-
-        //2019-07-02 23:20:00
+        String topic = "reminder";
+        
         int count=0;
 
-        String startDate = args[0];       // 开始时间
-
-
-        String endDate = args[1];         // 结束时间
-
+        //String startDate = args[0];       // 开始时间
+        //String endDate = args[1];         // 结束时间
+          
+          String startDate = "2019-07-08 00:00:00"; 
+          String endDate = "2019-07-09 00:00:00";
 
         Long startTime = timeFormat(startDate);
         long endTime = timeFormat(endDate);
@@ -139,9 +138,6 @@ public class TimestampConsumer {
 
                 timestampsToSearch.put(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()), fetchDataTime);
             }
-
-
-
 
             consumer.assign(topicPartitions);
             
@@ -193,8 +189,8 @@ public class TimestampConsumer {
     public static long timeFormat(String dateTime) {
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            //return (sdf.parse(dateTime).getTime() - 8 * 60 * 60 * 1000);
-            return (sdf.parse(dateTime).getTime());
+            return (sdf.parse(dateTime).getTime() - 8 * 60 * 60 * 1000);
+            //return (sdf.parse(dateTime).getTime());
         } catch (ParseException e) {
             e.printStackTrace();
             return 0;
